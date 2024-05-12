@@ -26,6 +26,7 @@ class DiffusionFFHooker(AggregateHooker):
             self,
             pipeline: Union[StableDiffusionPipeline, StableDiffusionXLPipeline],
             result: dict,
+            do_rand: bool,
             restrict: list = [7]
     ):
         self.locator = UNetFFLocator()
@@ -34,7 +35,8 @@ class DiffusionFFHooker(AggregateHooker):
             UNetFFHooker(
                 x,
                 layer_idx=idx,
-                result=result
+                result=result,
+                do_rand=do_rand
             ) for idx, x in enumerate(self.locator.locate(pipeline.unet)) if idx in restrict
         ]
 
@@ -53,12 +55,14 @@ class UNetFFHooker(ObjectHooker[Attention]):
         self,
         module,
         layer_idx,
-        result
+        result,
+        do_rand
     ):
         super().__init__(module)
         self.layer_idx = layer_idx
         self.data = []
         self.result = result
+        self.do_rand = do_rand
 
     def forw(self, module, inp, out):
         self.data.append(out)
@@ -69,8 +73,9 @@ class UNetFFHooker(ObjectHooker[Attention]):
     def _unhook_impl(self):
         self.hook.remove()
         to_save = torch.cat(self.data, dim=0).flatten(0, 1)
-        idx = torch.randperm(to_save.shape[0])
-        to_save = to_save[idx, :]
+        if self.do_rand:
+            idx = torch.randperm(to_save.shape[0])
+            to_save = to_save[idx, :]
         self.result[self.layer_idx] = to_save
 
 

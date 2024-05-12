@@ -74,6 +74,7 @@ class AutoEncoder(nn.Module):
         self.b_dec = nn.Parameter(torch.zeros(cfg["vector_len"], dtype=torch.float32))
 
         self.W_dec.data[:] = self.W_dec / self.W_dec.norm(dim=-1, keepdim=True)
+        self.d_hidden = cfg["d_hidden"]
 
         self.to(cfg["device"])
     
@@ -110,7 +111,7 @@ class AutoEncoder(nn.Module):
     
     @classmethod
     def load(cls, version):
-        cfg = (json.load(open(os.path.join(cfg["save_dir"], str(version)+"_cfg.json"), "r")))
+        # cfg = (json.load(open(os.path.join(cfg["save_dir"], str(version)+"_cfg.json"), "r")))
         pprint.pprint(cfg)
         self = cls(cfg=cfg)
         self.load_state_dict(torch.load(os.path.join(cfg["save_dir"], str(version)+".pt")))
