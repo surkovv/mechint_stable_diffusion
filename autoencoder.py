@@ -12,9 +12,7 @@ import torch.nn.functional as F
 
 
 cfg = {
-    "vector_len" : 320,
     "batch_vector_num" : 500,
-    "batch_num" : 8,
 
     "d_hidden_mul" : 256,
     "l1_coeff" : 3e-4,
@@ -23,10 +21,6 @@ cfg = {
     "device" : "cuda:0",
     "seed" : 49
 }
-cfg["batch_size"] = cfg["vector_len"] * cfg["batch_vector_num"]
-cfg["buffer_size"] = cfg["batch_size"] * cfg["batch_num"]
-
-cfg["d_hidden"] = cfg["vector_len"] * cfg["d_hidden_mul"]
 
 def get_acts(): # get output from mlp layer
     return torch.zeros((cfg["batch_vector_num"], cfg["vector_len"]))
@@ -34,34 +28,66 @@ def get_acts(): # get output from mlp layer
 wrapper = Wrapper()
 
 class Buffer():
-    def __init__(self, cfg):
+    def __init__(self, vector_len, cfg):
         self.buffer = None
         self.cfg = cfg
         self.token_pointer = 0
-        self.refresh()
+        self.vector_len = vector_len
+        self.batch_size = self.vector_len * cfg["batch_vector_num"]
+        self.finished = False
     
     @torch.no_grad()
-    def refresh(self):
-        self.pointer = 0
-        acts = wrapper.get()
-        if acts == None:
-            self.pointer = -1
-            return
+    def refresh(self, acts):
         acts = acts.flatten().to(cfg['device'])
         self.buffer = acts
-
         self.pointer = 0
+        self.finished = False
 
     @torch.no_grad()
     def next(self):
-        out = self.buffer[self.pointer:self.pointer+self.cfg["batch_size"]]
-        out = torch.reshape(out, (cfg["batch_vector_num"], cfg["vector_len"]))
-        self.pointer += self.cfg["batch_size"]
+        out = self.buffer[self.pointer:self.pointer+self.batch_size]
+        out = torch.reshape(out, (cfg["batch_vector_num"], self.vector_len))
+        self.pointer += self.batch_size
         if self.pointer >= self.buffer.shape[0]:
-            self.refresh()
-            if self.pointer == -1:
-                return None
+            self.finished = True
         return out
+    
+class BuffersHandler():
+    def __init__(self, cfg):
+        self.buffers = []
+        self.vector_lens = wrapper.get_sizes()
+        self.buffers_num = len(self.vector_lens)
+        for vector_len in self.vector_lens :
+            self.buffers.append(Buffer(vector_len, cfg))
+        
+        self.done = False
+    
+    @torch.no_grad()
+    def refresh(self) :
+        acts_list = wrapper.get()
+        if acts_list == None :
+            self.done = True
+            return
+        
+        for i in range(0, len(acts_list)) :
+            self.buffers[i].refresh(acts_list[i])
+
+    @torch.no_grad()
+    def next(self):
+        out_list = []
+        refresh = False
+        for buffer in self.buffers :
+            out = buffer.next()
+            out = torch.reshape(out, (cfg["batch_vector_num"], buffer.vector_len))
+            out_list.append(out)
+            refresh = (refresh or buffer.finished)
+        
+        if refresh :
+            self.refresh()
+            if (self.done) :
+                return None
+
+        return out_list
 
 
 class AutoEncoder(nn.Module):
