@@ -1,12 +1,13 @@
 from datasets import load_dataset
-from daam import trace, set_seed
+from daam import trace, set_seed, UNetFFLocator
 from diffusers import DiffusionPipeline
 from matplotlib import pyplot as plt
 import torch
+from random import shuffle
 
 
 class TrainingPipeline:
-    def __init__(self, dataset, pipe, n_filter=10000):
+    def __init__(self, dataset, pipe, n_filter=20000):
         self.dataset = dataset
         self.pipe = pipe
         self.current_idx = 0
@@ -26,7 +27,7 @@ class TrainingPipeline:
         with torch.no_grad():
             with trace(self.pipe, result, do_rand=True) as tc:
                 out = self.pipe(prompts, num_inference_steps=30, generator=self.gen)
-        return result[7][:self.n_filter]
+        return [r[:self.n_filter] for r in result]
 
     def get_div_prompts(self):
         prompts = self.dataset[self.current_idx: self.current_idx + self.batch_size]
@@ -48,13 +49,16 @@ class TrainingPipeline:
 
         return prompts, to_return
 
-        
+    def get_sizes(self):
+        locator = UNetFFLocator()
+        modules = locator.locate(self.pipe.unet)
+        return [module.dim for module in modules]
 
 
 class Wrapper:
     def __init__(self):
         coco = load_dataset("embedding-data/coco_captions_quintets")
-        dataset = [st['set'][0] for st in coco['train']]
+        dataset = shuffle([st['set'][0] for st in coco['train']])
         model_id = 'CompVis/stable-diffusion-v1-4'
         device = 'cuda'
 
@@ -67,6 +71,9 @@ class Wrapper:
 
     def get_div_prompts(self):
         return self.tp.get_div_prompts()
+
+    def get_sizes(self):
+        return self.tp.get_sizes()
 
 
 if __name__ == '__main__':
