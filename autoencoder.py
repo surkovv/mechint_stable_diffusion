@@ -12,29 +12,32 @@ import torch.nn.functional as F
 
 
 cfg = {
-    "batch_vector_num" : 500,
+    "batch_vector_num" : 2000,
     "batch_num" : 8,
 
     "d_hidden_mul" : 256,
     "l1_coeff" : 3e-4,
     "save_dir" : "./checkpoints/",
 
-    "device" : "cuda:0",
+    "device" : "cuda:1",
     "seed" : 49,
     "rare_threshold": 10 ** -4.5,
-    "do_resampling": True
+    # "rare_threshold": 0.3,
+    "do_resampling": True,
+    "iters_to_log": 100,
+    "iters_to_save": 3000,
 }
 
 def get_acts(): # get output from mlp layer
     return torch.zeros((cfg["batch_vector_num"], cfg["vector_len"]))
 
-wrapper = Wrapper()
+wrapper = Wrapper(restrict=list(range(4, 13)))
 
-class Buffer():
-    def init(self, vector_len, cfg):
+class Buffer:
+    def __init__(self, vector_len, cfg):
         self.buffer = None
         self.cfg = cfg
-        self.token_pointer = 0
+        self.pointer = 0
         self.vector_len = vector_len
         self.batch_size = self.vector_len * cfg["batch_vector_num"]
         self.finished = False
@@ -55,8 +58,8 @@ class Buffer():
             self.finished = True
         return out
     
-class BuffersHandler():
-    def init(self, cfg):
+class BuffersHandler:
+    def __init__(self, cfg):
         self.buffers = []
         self.vector_lens = wrapper.get_sizes()
         self.buffers_num = len(self.vector_lens)
@@ -64,11 +67,12 @@ class BuffersHandler():
             self.buffers.append(Buffer(vector_len, cfg))
         
         self.done = False
+        self.refresh()
     
     @torch.no_grad()
     def refresh(self) :
         acts_list = wrapper.get()
-        if acts_list == None :
+        if acts_list == None:
             self.done = True
             return
         
@@ -104,6 +108,9 @@ class AutoEncoder(nn.Module):
 
         self.W_dec.data[:] = self.W_dec / self.W_dec.norm(dim=-1, keepdim=True)
         self.num = num
+        self.save_dir = os.path.join(cfg['save_dir'], f'ae_{num}')
+        if not os.path.exists(self.save_dir):
+            os.makedirs(self.save_dir)
 
         self.to(cfg["device"])
     
@@ -125,7 +132,7 @@ class AutoEncoder(nn.Module):
         self.W_dec.data = W_dec_normed
     
     def get_version(self):
-        version_list = [int(file.split(".")[0]) for file in list(os.listdir(cfg["save_dir"])) if "pt" in str(file)]
+        version_list = [int(file.split(".")[0]) for file in list(os.listdir(self.save_dir)) if "pt" in str(file)]
         if len(version_list):
             return 1+max(version_list)
         else:
@@ -133,8 +140,8 @@ class AutoEncoder(nn.Module):
 
     def save(self):
         version = self.get_version()
-        torch.save(self.state_dict(), os.path.join(cfg["save_dir"], f'ae_{self.num}', str(version)+".pt"))
-        with open(os.path.join(cfg["save_dir"], f'ae_{self.num}', str(version)+"_cfg.json"), "w") as f:
+        torch.save(self.state_dict(), os.path.join(self.save_dir, str(version)+".pt"))
+        with open(os.path.join(self.save_dir, str(version)+"_cfg.json"), "w") as f:
             json.dump(cfg, f)
         print("Saved as version", version)
     
@@ -143,6 +150,6 @@ class AutoEncoder(nn.Module):
         # cfg = (json.load(open(os.path.join(cfg["save_dir"], str(version)+"_cfg.json"), "r")))
         pprint.pprint(cfg)
         self = cls(cfg=cfg)
-        self.load_state_dict(torch.load(os.path.join(cfg["save_dir"], str(version)+".pt")))
+        self.load_state_dict(torch.load(os.path.join(self.save_dir, str(version)+".pt")))
         return self
 

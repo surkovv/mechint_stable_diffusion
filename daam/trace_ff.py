@@ -18,18 +18,18 @@ from .utils import cache_dir, auto_autocast
 from .hook import ObjectHooker, AggregateHooker, UNetCrossAttentionLocator, ModuleLocator
 
 
-__all__ = ['trace', 'DiffusionFFHooker']
-
-
 class DiffusionFFHooker(AggregateHooker):
     def __init__(
             self,
             pipeline: Union[StableDiffusionPipeline, StableDiffusionXLPipeline],
             result: dict,
             do_rand: bool,
-            restrict: list = [7]
+            restrict: list = list(range(4, 13))
     ):
         self.locator = UNetFFLocator()
+
+        if restrict is None:
+            restrict = list(range(100))
 
         modules = [
             UNetFFHooker(
@@ -65,14 +65,14 @@ class UNetFFHooker(ObjectHooker[Attention]):
         self.do_rand = do_rand
 
     def forw(self, module, inp, out):
-        self.data.append(out)
+        self.data.append(out.cpu())
 
     def _hook_impl(self):
         self.hook = self.module.register_forward_hook(lambda *args, **kwargs: self.forw(*args, **kwargs))
 
     def _unhook_impl(self):
         self.hook.remove()
-        to_save = torch.cat(self.data, dim=0).flatten(0, 1)
+        to_save = torch.cat([d.cpu() for d in self.data], dim=0).flatten(0, 1)
         if self.do_rand:
             idx = torch.randperm(to_save.shape[0])
             to_save = to_save[idx, :]
@@ -103,8 +103,8 @@ class UNetFFLocator(ModuleLocator[Attention]):
         counter = 0
         for unet_block, name in itertools.chain(
             zip(model.up_blocks, up_names),
-            zip([model.mid_block], ['mid']),
-            zip(model.down_blocks, down_names)
+            zip(model.down_blocks, down_names),
+            zip([model.mid_block], ['mid'])
         ):
             if 'CrossAttn' in unet_block.__class__.__name__:
                 blocks = []
