@@ -12,7 +12,6 @@ import torch.nn.functional as F
 
 
 cfg = {
-    "vector_len" : 320,
     "batch_vector_num" : 500,
     "batch_num" : 8,
 
@@ -21,12 +20,10 @@ cfg = {
     "save_dir" : "./checkpoints/",
 
     "device" : "cuda:0",
-    "seed" : 49
+    "seed" : 49,
+    "rare_threshold": 10 ** -4.5,
+    "do_resampling": True
 }
-cfg["batch_size"] = cfg["vector_len"] * cfg["batch_vector_num"]
-cfg["buffer_size"] = cfg["batch_size"] * cfg["batch_num"]
-
-cfg["d_hidden"] = cfg["vector_len"] * cfg["d_hidden_mul"]
 
 def get_acts(): # get output from mlp layer
     return torch.zeros((cfg["batch_vector_num"], cfg["vector_len"]))
@@ -34,47 +31,79 @@ def get_acts(): # get output from mlp layer
 wrapper = Wrapper()
 
 class Buffer():
-    def __init__(self, cfg):
+    def init(self, vector_len, cfg):
         self.buffer = None
         self.cfg = cfg
         self.token_pointer = 0
-        self.refresh()
+        self.vector_len = vector_len
+        self.batch_size = self.vector_len * cfg["batch_vector_num"]
+        self.finished = False
     
     @torch.no_grad()
-    def refresh(self):
-        self.pointer = 0
-        acts = wrapper.get()
-        if acts == None:
-            self.pointer = -1
-            return
+    def refresh(self, acts):
         acts = acts.flatten().to(cfg['device'])
         self.buffer = acts
-
         self.pointer = 0
+        self.finished = False
 
     @torch.no_grad()
     def next(self):
-        out = self.buffer[self.pointer:self.pointer+self.cfg["batch_size"]]
-        out = torch.reshape(out, (cfg["batch_vector_num"], cfg["vector_len"]))
-        self.pointer += self.cfg["batch_size"]
+        out = self.buffer[self.pointer:self.pointer+self.batch_size]
+        out = torch.reshape(out, (cfg["batch_vector_num"], self.vector_len))
+        self.pointer += self.batch_size
         if self.pointer >= self.buffer.shape[0]:
-            self.refresh()
-            if self.pointer == -1:
-                return None
+            self.finished = True
         return out
+    
+class BuffersHandler():
+    def init(self, cfg):
+        self.buffers = []
+        self.vector_lens = wrapper.get_sizes()
+        self.buffers_num = len(self.vector_lens)
+        for vector_len in self.vector_lens :
+            self.buffers.append(Buffer(vector_len, cfg))
+        
+        self.done = False
+    
+    @torch.no_grad()
+    def refresh(self) :
+        acts_list = wrapper.get()
+        if acts_list == None :
+            self.done = True
+            return
+        
+        for i in range(0, len(acts_list)) :
+            self.buffers[i].refresh(acts_list[i])
 
+    @torch.no_grad()
+    def next(self):
+        out_list = []
+        refresh = False
+        for buffer in self.buffers :
+            out = buffer.next()
+            out = torch.reshape(out, (cfg["batch_vector_num"], buffer.vector_len))
+            out_list.append(out)
+            refresh = (refresh or buffer.finished)
+        
+        if refresh :
+            self.refresh()
+            if (self.done) :
+                return None
+
+        return out_list
 
 class AutoEncoder(nn.Module):
-    def __init__(self, cfg):
+    def __init__(self, cfg, dim, num):
         super().__init__()
         torch.manual_seed(cfg["seed"])
-        self.W_enc = nn.Parameter(torch.nn.init.kaiming_uniform_(torch.empty(cfg["vector_len"], cfg["d_hidden"], dtype=torch.float32)))
-        self.W_dec = nn.Parameter(torch.nn.init.kaiming_uniform_(torch.empty(cfg["d_hidden"], cfg["vector_len"], dtype=torch.float32)))
-        self.b_enc = nn.Parameter(torch.zeros(cfg["d_hidden"], dtype=torch.float32))
-        self.b_dec = nn.Parameter(torch.zeros(cfg["vector_len"], dtype=torch.float32))
+        self.d_hidden = cfg["d_hidden_mul"] * dim
+        self.W_enc = nn.Parameter(torch.nn.init.kaiming_uniform_(torch.empty(dim, self.d_hidden, dtype=torch.float32)))
+        self.W_dec = nn.Parameter(torch.nn.init.kaiming_uniform_(torch.empty(self.d_hidden, dim, dtype=torch.float32)))
+        self.b_enc = nn.Parameter(torch.zeros(self.d_hidden, dtype=torch.float32))
+        self.b_dec = nn.Parameter(torch.zeros(dim, dtype=torch.float32))
 
         self.W_dec.data[:] = self.W_dec / self.W_dec.norm(dim=-1, keepdim=True)
-        self.d_hidden = cfg["d_hidden"]
+        self.num = num
 
         self.to(cfg["device"])
     
@@ -104,8 +133,8 @@ class AutoEncoder(nn.Module):
 
     def save(self):
         version = self.get_version()
-        torch.save(self.state_dict(), os.path.join(cfg["save_dir"], str(version)+".pt"))
-        with open(os.path.join(cfg["save_dir"], str(version)+"_cfg.json"), "w") as f:
+        torch.save(self.state_dict(), os.path.join(cfg["save_dir"], f'ae_{self.num}', str(version)+".pt"))
+        with open(os.path.join(cfg["save_dir"], f'ae_{self.num}', str(version)+"_cfg.json"), "w") as f:
             json.dump(cfg, f)
         print("Saved as version", version)
     
