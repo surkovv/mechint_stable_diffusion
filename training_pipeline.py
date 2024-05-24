@@ -7,7 +7,7 @@ from random import shuffle
 
 
 class TrainingPipeline:
-    def __init__(self, dataset, pipe, n_filter=10000):
+    def __init__(self, dataset, pipe, n_filter=50000):
         self.dataset = dataset
         self.pipe = pipe
         self.current_idx = 0
@@ -28,7 +28,10 @@ class TrainingPipeline:
             with trace(self.pipe, result, do_rand=True) as tc:
                 out = self.pipe(prompts, num_inference_steps=15, generator=self.gen)
         
-        return [r[:self.n_filter] for k, r in result.items()]
+        return [
+            torch.cat(r[:(self.n_filter + self.batch_size - 1) // self.batch_size]).flatten(0, 1)[:self.n_filter] 
+            for k, r in result.items()
+        ]
 
     def get_div_prompts(self):
         prompts = self.dataset[self.current_idx: self.current_idx + self.batch_size]

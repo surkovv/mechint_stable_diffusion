@@ -1,11 +1,12 @@
 from autoencoder import *
 import matplotlib.pyplot as plt
+import numpy as np
 
 class AutoEncoderEnv:
     def __init__(self, dim, num):
         self.dim = dim
         self.autoencoder = AutoEncoder(cfg, dim, num)
-        self.encoder_optim = torch.optim.Adam(self.autoencoder.parameters(), lr=1e-4, betas=(0.9, 0.99))
+        self.encoder_optim = torch.optim.Adam(self.autoencoder.parameters(), lr=3e-5, betas=(0.9, 0.99))
         self.occurs = torch.zeros(self.autoencoder.d_hidden).to(cfg['device'])
         self.total = 0
         self.num = num
@@ -73,6 +74,9 @@ def need_count_freqs(i):
     return i % cfg['iters_to_save'] >= cfg['iters_to_save'] // 2
 
 i = 0
+
+losses, l1_losses, l2_losses = [], [], []
+
 try:
     while True:
         acts_many = buffers_handler.next()
@@ -94,20 +98,25 @@ try:
                 ae_env.total += mid_acts.shape[0]
                 ae_env.occurs += (mid_acts > 0).sum(0)
 
-            loss_dict = {"loss": loss.item(), "l2_loss": l2_loss.item(), "l1_loss": l1_loss.item()}
+            losses.append(loss.item())
+            l2_losses.append(l2_loss.item())
+            l1_losses.append(l1_loss.item())
             del loss, x_reconstruct, mid_acts, l2_loss, l1_loss, acts
             if (i) % cfg['iters_to_log'] == 0:
                 print(f'Iter {i} Encoder {ne}; dim {ae_env.dim}')
+                loss_dict = {"loss": np.mean(losses), "l2_loss": np.mean(l2_losses), "l1_loss": np.mean(l1_losses)}
                 print(loss_dict)
+                losses, l1_losses, l2_losses = [], [], []
             if (i+1) % cfg['iters_to_save'] == 0:
                 encoder.save()
+                freqs = ae_env.get_frequencies()
+                rare_mask = freqs < cfg['rare_threshold']
+                np.save(os.path.join(encoder.save_dir, f'freqs_{encoder.get_version() - 1}.npy'), freqs.cpu().numpy())
+                print(f"Encoder {ne}. Rare {rare_mask.to(dtype=float).mean():.3f}")
+                ae_env.plot_freqs()
+                ae_env.plot_cossim()
                 if cfg['do_resampling']:
-                    freqs = ae_env.get_frequencies()
-                    rare_mask = freqs < cfg['rare_threshold']
-                    ae_env.plot_freqs()
-                    ae_env.plot_cossim()
                     re_init(rare_mask, encoder)
-                    print(f"Encoder {ne}. Rare {rare_mask.to(dtype=float).mean():.3f}")
         i += 1
 finally:
     pass

@@ -13,6 +13,7 @@ import PIL.Image as Image
 import torch
 import torch.nn.functional as F
 from diffusers import UNet2DConditionModel
+import random
 
 from .utils import cache_dir, auto_autocast
 from .hook import ObjectHooker, AggregateHooker, UNetCrossAttentionLocator, ModuleLocator
@@ -65,18 +66,16 @@ class UNetFFHooker(ObjectHooker[Attention]):
         self.do_rand = do_rand
 
     def forw(self, module, inp, out):
-        self.data.append(out.cpu())
+        self.data.append(out)
 
     def _hook_impl(self):
         self.hook = self.module.register_forward_hook(lambda *args, **kwargs: self.forw(*args, **kwargs))
 
     def _unhook_impl(self):
         self.hook.remove()
-        to_save = torch.cat([d.cpu() for d in self.data], dim=0).flatten(0, 1)
         if self.do_rand:
-            idx = torch.randperm(to_save.shape[0])
-            to_save = to_save[idx, :]
-        self.result[self.layer_idx] = to_save
+            random.shuffle(self.data)
+        self.result[self.layer_idx] = self.data
 
 
 class UNetFFLocator(ModuleLocator[Attention]):
