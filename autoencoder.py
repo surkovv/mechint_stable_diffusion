@@ -6,7 +6,7 @@ import numpy as np
 import random
 from pathlib import Path
 from torch import nn
-from training_pipeline import Wrapper
+from training_pipeline import Wrapper, AnalysisPipeline
 import os
 import torch.nn.functional as F
 
@@ -27,12 +27,17 @@ cfg = {
     "do_resampling": False,
     "iters_to_log": 100,
     "iters_to_save": 3000,
+    "training": False,
+    "analysis_prompt": "A table in a kitchen"
 }
 
 def get_acts(): # get output from mlp layer
     return torch.zeros((cfg["batch_vector_num"], cfg["vector_len"]))
 
-wrapper = Wrapper(restrict=list(range(4, 13)))
+if cfg['training']:
+    wrapper = Wrapper(restrict=list(range(4, 13)))
+else:
+    wrapper = AnalysisPipeline(prompt=cfg['analysis_prompt'], restrict=list(range(4, 13)))
 
 class Buffer:
     def __init__(self, vector_len, cfg):

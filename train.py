@@ -2,6 +2,8 @@ from autoencoder import *
 import matplotlib.pyplot as plt
 import numpy as np
 
+assert cfg['training'], "Enable training in config"
+
 class AutoEncoderEnv:
     def __init__(self, dim, num):
         self.dim = dim
