@@ -4,7 +4,8 @@ from diffusers import DiffusionPipeline
 from matplotlib import pyplot as plt
 import torch
 from random import shuffle
-
+from diffusers import AutoPipelineForImage2Image
+from diffusers.utils import make_image_grid, load_image
 
 class TrainingPipeline:
     def __init__(self, dataset, pipe, n_filter=50000):
@@ -80,6 +81,36 @@ class Wrapper:
     def get_sizes(self):
         return self.tp.get_sizes(self.restrict)
 
+
+class AnalysisPipeline:
+    def __init__(self, prompt, n_filter=50000):
+        self.image = None
+        self.prompt = prompt
+        self.pipe = AutoPipelineForImage2Image.from_pretrained('CompVis/stable-diffusion-v1-4', safety_checker=None, use_auth_token=True, variant='fp16')
+        self.pipe = self.pipe.to('cuda')
+        self.pipe.enable_xformers_memory_efficient_attention()
+        self.batch_size = 10
+        self.n_filter = n_filter
+        self.gen = set_seed(0) 
+
+
+    def set_image(self, img_path):
+        self.image = load_image(img_path).to('cuda')
+
+    def get(self):
+        assert self.image is not None, "Image not set"
+        result = {}
+
+        with torch.no_grad():
+            with trace(self.pipe, result, do_rand=True) as tc:
+                out = self.pipe(prompt, image, num_inference_steps=15, 
+                generator=self.gen, strength=0.5, num_images_per_prompt=self.batch_size)
+        
+        return [
+            torch.cat(r[:(self.n_filter + self.batch_size - 1) // self.batch_size]).flatten(0, 1)[:self.n_filter] 
+            for k, r in result.items()
+        ]
+        
 
 if __name__ == '__main__':
     wrapper = Wrapper()
