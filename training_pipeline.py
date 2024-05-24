@@ -4,7 +4,7 @@ from diffusers import DiffusionPipeline
 from matplotlib import pyplot as plt
 import torch
 from random import shuffle
-from diffusers import AutoPipelineForImage2Image
+from diffusers import AutoPipelineForImage2Image, ControlNetModel, StableDiffusionControlNetPipeline, UniPCMultistepScheduler
 from diffusers.utils import make_image_grid, load_image
 
 class TrainingPipeline:
@@ -83,19 +83,23 @@ class Wrapper:
 
 
 class AnalysisPipeline:
-    def __init__(self, prompt, n_filter=50000):
+    def __init__(self, prompt, restrict=list(range(4, 13)), n_filter=50000):
         self.image = None
         self.prompt = prompt
-        self.pipe = AutoPipelineForImage2Image.from_pretrained('CompVis/stable-diffusion-v1-4', safety_checker=None, use_auth_token=True, variant='fp16')
+        controlnet = ControlNetModel.from_pretrained("lllyasviel/sd-controlnet-scribble", torch_dtype=torch.float16, use_safetensors=True)
+        self.pipe = StableDiffusionControlNetPipeline.from_pretrained(
+            "CompVis/stable-diffusion-v1-4", controlnet=controlnet, torch_dtype=torch.float16, use_safetensors=True, safety_checker=None
+        )
+        self.pipe.scheduler = UniPCMultistepScheduler.from_config(self.pipe.scheduler.config)
+        self.restrict = restrict
         self.pipe = self.pipe.to('cuda')
-        self.pipe.enable_xformers_memory_efficient_attention()
         self.batch_size = 10
         self.n_filter = n_filter
         self.gen = set_seed(0) 
 
 
     def set_image(self, img_path):
-        self.image = load_image(img_path).to('cuda')
+        self.image = load_image(img_path)
 
     def get(self):
         assert self.image is not None, "Image not set"
@@ -103,16 +107,24 @@ class AnalysisPipeline:
 
         with torch.no_grad():
             with trace(self.pipe, result, do_rand=True) as tc:
-                out = self.pipe(prompt, image, num_inference_steps=15, 
-                generator=self.gen, strength=0.5, num_images_per_prompt=self.batch_size)
+                out = self.pipe(self.prompt, self.image, num_inference_steps=15, 
+                generator=self.gen, num_images_per_prompt=self.batch_size)
         
         return [
             torch.cat(r[:(self.n_filter + self.batch_size - 1) // self.batch_size]).flatten(0, 1)[:self.n_filter] 
             for k, r in result.items()
         ]
+
+    def get_sizes(self):
+        locator = UNetFFLocator()
+        modules = locator.locate(self.pipe.unet)
+        return [module.net[0].proj.in_features for i, module in enumerate(modules)if i in self.restrict]
+
         
 
 if __name__ == '__main__':
-    wrapper = Wrapper()
+    wrapper = AnalysisPipeline(prompt='A table in a kitchen')
+    wrapper.set_image('../imgs/table_with_edges.png')
     A = wrapper.get()
-    print(A.shape)
+    print(A[0].shape)
+    print(wrapper.get_sizes())
