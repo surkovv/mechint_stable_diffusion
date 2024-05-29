@@ -109,7 +109,6 @@ class AnalysisPipeline:
             with trace(self.pipe, result, do_rand=True) as tc:
                 out = self.pipe(self.prompt, self.image, num_inference_steps=15, 
                 generator=self.gen, num_images_per_prompt=self.batch_size)
-                out.images[0].save('../res_imgs/out.png')
         
         return [
             torch.cat(r[:(self.n_filter + self.batch_size - 1) // self.batch_size]).flatten(0, 1)[:self.n_filter] 
