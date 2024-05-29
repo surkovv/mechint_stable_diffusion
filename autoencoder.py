@@ -131,6 +131,14 @@ class AutoEncoder(nn.Module):
         return loss, x_reconstruct, acts, l2_loss, l1_loss
     
     @torch.no_grad()
+    def encode(self, input) :
+        return F.relu(input @ self.W_enc + self.b_enc)
+    
+    @torch.no_grad()
+    def decode(self, hidden) :
+        return hidden @ self.W_dec + self.b_dec
+
+    @torch.no_grad()
     def make_decoder_weights_and_grad_unit_norm(self):
         W_dec_normed = self.W_dec / self.W_dec.norm(dim=-1, keepdim=True)
         W_dec_grad_proj = (self.W_dec.grad * W_dec_normed).sum(-1, keepdim=True) * W_dec_normed
