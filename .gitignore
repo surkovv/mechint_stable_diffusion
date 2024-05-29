@@ -3,3 +3,4 @@ checkpoints*/
 __pycache__/
 logs.txt
 out_imgs/
+gen_imgs/
