@@ -126,10 +126,10 @@ class UNetFFHookerIntervent(ObjectHooker[Attention]):
 
     def forw(self, module, inp, out):
         if self.neurons_to_reset is not None:
-            hidden_acts = self.autoencoder.encode(out)
-            hidden_acts[:, self.neurons_to_reset] = 0
+            hidden_acts = self.autoencoder.encode(out.to(dtype=torch.float32))
+            hidden_acts[:, :, self.neurons_to_reset] = 0
             out = self.autoencoder.decode(hidden_acts)
-        return out
+        return out.to(dtype=torch.float16)
 
 
     def _hook_impl(self):

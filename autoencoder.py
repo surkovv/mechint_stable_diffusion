@@ -132,6 +132,7 @@ class AutoEncoder(nn.Module):
     
     @torch.no_grad()
     def encode(self, input) :
+        
         return F.relu(input @ self.W_enc + self.b_enc)
     
     @torch.no_grad()
