@@ -51,6 +51,39 @@ class DiffusionFFHooker(AggregateHooker):
         return self.locator.layer_names
 
 
+class DiffusionFFHookerIntervent(AggregateHooker):
+    def __init__(
+        self,
+        pipeline: Union[StableDiffusionPipeline, StableDiffusionXLPipeline],
+        restrict: list = list(range(4, 13)),
+        autoencoders = None,
+        reset_masks: List[torch.Tensor] = None
+    ):
+        self.locator = UNetFFLocator()
+
+        if restrict is None:
+            restrict = list(range(100))
+
+        xs = [x for idx, x in enumerate(self.locator.locate(pipeline.unet)) if idx in restrict]
+
+        modules = [
+            UNetFFHookerIntervent(
+                x,
+                layer_idx=idx,
+                autoencoder=autoencoder,
+                neurons_to_reset=reset_mask
+            ) for idx, (x, autoencoder, reset_mask) in enumerate(
+                zip(xs, autoencoders, reset_masks))
+        ]
+
+        self.pipe = pipeline
+        super().__init__(modules)
+
+    @property
+    def layer_names(self):
+        return self.locator.layer_names
+
+
 class UNetFFHooker(ObjectHooker[Attention]):
     def __init__(
         self,
@@ -77,6 +110,34 @@ class UNetFFHooker(ObjectHooker[Attention]):
             random.shuffle(self.data)
         self.result[self.layer_idx] = self.data
 
+
+class UNetFFHookerIntervent(ObjectHooker[Attention]):
+    def __init__(
+        self,
+        module,
+        layer_idx,
+        autoencoder,
+        neurons_to_reset
+    ):
+        super().__init__(module)
+        self.layer_idx = layer_idx
+        self.autoencoder = autoencoder
+        self.neurons_to_reset = neurons_to_reset
+
+    def forw(self, module, inp, out):
+        if self.neurons_to_reset is not None:
+            hidden_acts = self.autoencoder.encode(out)
+            hidden_acts[:, self.neurons_to_reset] = 0
+            out = self.autoencoder.decode(hidden_acts)
+        return out
+
+
+    def _hook_impl(self):
+        self.hook = self.module.register_forward_hook(lambda *args, **kwargs: self.forw(*args, **kwargs))
+
+    def _unhook_impl(self):
+        self.hook.remove()
+        
 
 class UNetFFLocator(ModuleLocator[Attention]):
     def __init__(self, restrict: bool = None, locate_middle_block: bool = False):
@@ -119,3 +180,4 @@ class UNetFFLocator(ModuleLocator[Attention]):
         return blocks_list
 
 trace = DiffusionFFHooker
+trace_intervention = DiffusionFFHookerIntervent
