@@ -39,6 +39,7 @@ class BuffersHandler:
         
         self.done = False
         self.wrapper = wrapper
+        self.cfg = cfg
         self.refresh()
     
     @torch.no_grad()

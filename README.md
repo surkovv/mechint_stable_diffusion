@@ -4,6 +4,34 @@ This code allows you to reproduce all the results described in the final report,
 
 # Scripts usage
 
+## Training Sparse Autoencoders
+
+This script trains a sparse autoencoder for nine stable diffusion blocks. All settings for the train process is specified in the config in `cfg.py`. During the training process, autoencoders, plots of neuron frequencies and their similarities save in the `cfg["save_dir"]` every `cfg["iters_to_save"]` iterations.
+
+### Usage
+``` bash
+python train.py
+```
+
+## Counting frequencies of hidden neurons for different prompts
+This script is counting frequencies for different prompts of hidden neurons for each autoencoder and stores these frequencies as numpy arrays, which can be used in the analysis later. It uses ControlNet for generating images to get images as similar in content as possible. Specify desired prompts in `prompts.py`.
+
+### Usage
+``` bash
+python get_freqs_controlnet.py [img_path] [save_subfolder] --ae_version [ae_version] --cycles [cycles]
+```
+
+### Arguments
+* `img_path` - The controlling image for ControlNet.
+* `save_subfolder` - The subfolder in `ae_{ae_number}/` folder where frequencies will be saved.
+* `ae_version` - The version of autoencoder. Default is `15`.
+* `num_images_per_prompt` - Number of cycles to count frequences per prompt. Default is `300`.
+
+### Example
+``` bash
+python get_freqs_controlnet.py "./control_images/table_with_edges.png" "ctrl_freqs/"
+```
+
 ## Generation with intervention
 This script generates images after zeroing frequent or rear hidden neurons in each autoencoder separately. Also it generates corresponding images without intervention and with zeroing all neurons.
 
@@ -49,3 +77,7 @@ python analyze_freqs.py [ae_number] [frequencies_path] [frequencies_to_compare_p
 ```bash
 python analyze_freqs.py 5 freqs_green.npy freqs_table.npy --subfolder="ctrl_freqs/" --plot_savedir="analyzes/freqs_hist.png"
 ```
+
+# Authors
+Viacheslav Surkov  (https://github.com/surkovv) <br />
+Danila Zubko (https://github.com/danila0606)

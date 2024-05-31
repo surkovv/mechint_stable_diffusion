@@ -57,8 +57,6 @@ for j in tqdm(range(0, len(autoencoders))) :
         for i in range(len(autoencoders)):
             if i not in neurons_to_zero:
                 reset_masks.append(None)
-            elif not neurons_to_zero[i] :
-                reset_masks.append(None)
             else:
                 mask = torch.zeros(autoencoders[i].d_hidden, dtype=torch.bool).to('cuda')
                 for neuron in neurons_to_zero[i]:
@@ -77,4 +75,12 @@ for j in tqdm(range(0, len(autoencoders))) :
     
     with trace_intervention(pipeline=pipe, autoencoders=autoencoders, reset_masks=get_ae_mask(all_neurons_to_delete)) as trace:
         generate_image(pipe, 'intervention_zero_all_ae_' + str(j))
+
+    no_neurons_to_delete = {}
+    no_neurons_to_delete[j] = []
+
+    with trace_intervention(pipeline=pipe, autoencoders=autoencoders, reset_masks=get_ae_mask(no_neurons_to_delete)) as trace:
+        generate_image(pipe, 'intervention_zero_no_ae_' + str(j))
+
+
     

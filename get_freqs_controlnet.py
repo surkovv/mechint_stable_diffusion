@@ -1,22 +1,18 @@
 import numpy as np
 from tqdm import tqdm
+import argparse
 
 from autoencoder import *
 from training_pipeline import AnalysisPipeline
 from cfg import cfg
+from prompts import prompts
 
-ae_version = 15
-sub_folder = r'ctrl_freqs/'
-cycles_per_image = 300
-img_path = r'../imgs/table_with_edges.png'
-
-prompts = [('a table in a kitchen', 'table'),
-            ('a blue table in a kitchen', 'blue'),
-            ('a green table in a kitchen', 'green'),
-            ('a glass table in a kitchen', 'glass'),
-            ('a table in a kitchen with tile floor', 'tile'),
-            ('a table in a kitchen with laminate floor', 'laminate'),
-]
+parser=argparse.ArgumentParser()
+parser.add_argument("img_path", type=str)
+parser.add_argument("save_subfolder", type=str)
+parser.add_argument("--ae_version", default=15, type=int)
+parser.add_argument("--cycles", default=300, type=int)
+args=parser.parse_args()
 
 wrapper = AnalysisPipeline(restrict=list(range(4, 13)))
 
@@ -28,17 +24,17 @@ totals = []
 
 for i in range(0, len(ae_folders)) :
     ae = AutoEncoder(cfg, dims[i], i)
-    ae = ae.load(cfg, ae_version)
+    ae = ae.load(cfg, args.ae_version)
     autoencoders.append(ae)
     all_freqs.append(np.zeros(ae.d_hidden))
     totals.append(0)
 
 
 for prompt, name in prompts:
-    wrapper.set_image(img_path)
+    wrapper.set_image(args.img_path)
     wrapper.set_prompt(prompt)
-    buffers_handler = BuffersHandler(cfg)
-    for _ in tqdm(range(0, cycles_per_image)) :
+    buffers_handler = BuffersHandler(cfg, wrapper)
+    for _ in tqdm(range(0, args.cycles)) :
         all_acts = buffers_handler.next()
         for i in range (0, len(autoencoders)) :
             hidden = autoencoders[i](all_acts[i])[2]
@@ -49,8 +45,8 @@ for prompt, name in prompts:
     
     for i in range (0, len(all_freqs)) :
         all_freqs[i] /= totals[i]
-        os.makedirs(os.path.join(cfg['save_dir'], f'ae_{i}', sub_folder), exist_ok=True)
-        np.save(os.path.join(cfg['save_dir'], f'ae_{i}', sub_folder, 'freqs_' + name + '.npy'), all_freqs[i])
+        np.save(os.path.join(cfg['save_dir'], f'ae_{i}', args.save_subfolder, 'freqs_' + name + '.npy'), all_freqs[i])
+        os.makedirs(os.path.join(cfg['save_dir'], f'ae_{i}', args.save_subfolder), exist_ok=True)
         all_freqs[i] = np.zeros_like(all_freqs[i])
         totals[i] = 0
 

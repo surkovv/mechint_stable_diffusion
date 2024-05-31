@@ -32,7 +32,7 @@ freqs_original_log = np.log10(freqs_original + offset)
 plt.hist(freqs_original_log, bins=30)
 active_freqs_log = np.log10(freqs1[active_neurons] + offset)
 print("Active neurons: ", active_neurons)
-for i, freq in enumerate(active_freqs_log):
+for i, freq in enumerate(active_freqs_log) :
     plt.vlines(freq, ymin=0, ymax=3000, color='k')
     plt.text(freq, 3000, f'{active_neurons[i]}', rotation=90, verticalalignment='bottom', horizontalalignment='right', fontsize=8)
 

@@ -2,6 +2,7 @@ from autoencoder import *
 import matplotlib.pyplot as plt
 import numpy as np
 
+from training_pipeline import Wrapper
 from cfg import cfg
 
 wrapper = Wrapper(restrict=list(range(4, 13)))
