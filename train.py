@@ -2,7 +2,9 @@ from autoencoder import *
 import matplotlib.pyplot as plt
 import numpy as np
 
-assert cfg['training'], "Enable training in config"
+from cfg import cfg
+
+wrapper = Wrapper(restrict=list(range(4, 13)))
 
 class AutoEncoderEnv:
     def __init__(self, dim, num):
@@ -70,7 +72,7 @@ def re_init(indices, encoder):
 dims = wrapper.get_sizes()
 print(dims)
 ae_envs = [AutoEncoderEnv(dim, i) for i, dim in enumerate(dims)]
-buffers_handler = BuffersHandler(cfg)
+buffers_handler = BuffersHandler(cfg, wrapper)
 
 def need_count_freqs(i):
     return i % cfg['iters_to_save'] >= cfg['iters_to_save'] // 2

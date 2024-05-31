@@ -1,6 +1,7 @@
 checkpoints*/
 */__pycache__/
 __pycache__/
+daam/__pycache__/
 logs.txt
 out_imgs/
 gen_imgs/
