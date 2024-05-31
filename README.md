@@ -4,6 +4,8 @@ This code allows you to reproduce all the results described in the final report,
 
 # Scripts usage
 
+The code was tested with python 3.12 
+
 ## Training Sparse Autoencoders
 
 This script trains a sparse autoencoder for nine stable diffusion blocks. All settings for the train process is specified in the config in `cfg.py`. During the training process, autoencoders, plots of neuron frequencies and their similarities save in the `cfg["save_dir"]` every `cfg["iters_to_save"]` iterations.
