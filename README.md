@@ -2,6 +2,8 @@
 
 This code allows you to reproduce all the results described in the final report, namely: train autoencoders on each Stable Diffusion block, calculate the activation frequencies of each hidden neuron and analyze their activations on various prompts.
 
+![image](grid.png)
+
 # Scripts usage
 
 The code was tested with python 3.12 
